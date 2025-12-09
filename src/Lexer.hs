@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Lexer where
 
 import Data.List (stripPrefix, isPrefixOf)
@@ -5,6 +6,9 @@ import Data.Maybe (fromMaybe)
 import Data.Char (digitToInt)
 
 import GHC.List (uncons)
+
+import qualified Text.Megaparsec as TM
+import qualified Data.List.NonEmpty as NE
 
 import Text.Megaparsec.Pos (
         SourcePos, unPos, sourceLine,
@@ -15,7 +19,33 @@ data LocatedToken = LToken {
     lToken :: Token,    -- Token
     lPos   :: SourcePos,-- Where the Token is starting (file, line, column)
     lText  :: String    -- Original Token Text eg. ("  int   ")
-} deriving (Show, Eq)
+} deriving (Show, Eq, Ord)
+
+instance TM.VisualStream [LocatedToken] where
+    showTokens   _ tokens = unwords . map lText . NE.toList $ tokens
+    tokensLength _ tokens = NE.length tokens
+
+instance TM.TraversableStream [LocatedToken] where
+    reachOffset targetOffset pst = let
+            (pre, post) = splitAt (targetOffset - TM.pstateOffset pst) (TM.pstateInput pst)
+            newSourcePos = case post of
+                (x:_) -> lPos x
+                []    -> case reverse pre of
+                           []    -> TM.pstateSourcePos pst
+                           (x:_) -> let pos = lPos x
+                                        col = unPos (sourceColumn pos)
+                                        len = length (lText x)
+                                    in pos { sourceColumn = mkPos (col + len) }
+
+            targetLine = sourceLine newSourcePos
+            onSameLine t = sourceLine (lPos t) == targetLine
+            reconstructedLine = concatMap lText (filter onSameLine (pre ++ post))
+        in
+            (Just reconstructedLine, pst {
+                TM.pstateInput = post,
+                TM.pstateOffset = targetOffset,
+                TM.pstateSourcePos = newSourcePos
+            })
 
 printTokens :: [LocatedToken] -> IO ()
 printTokens [] = putStrLn "=== End Of Tokens ==="
