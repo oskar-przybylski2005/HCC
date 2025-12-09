@@ -1,65 +1,71 @@
 module PrettyTree where
 
-import Parser
+import HParser
 
 --------------------------------------------------------------------------------
 --  PUBLIC API
 --------------------------------------------------------------------------------
 
 printProgram :: Program -> IO ()
-printProgram prog = putStrLn (unlines (treeProgram prog))
+printProgram prog = putStrLn $ programAsString $ prog
 
---------------------------------------------------------------------------------
---  TREE BUILDERS
---------------------------------------------------------------------------------
+programAsString :: Program -> String
+programAsString funcs =
+    unlines $
+      ["Program"] ++
+      concat (zipWith (\f isLast -> printFunc f "" isLast)
+                      funcs
+                      (lastFlags funcs))
 
-treeProgram :: Program -> [String]
-treeProgram funcs =
-    concatMap (\f -> treeNode True ("Function: " ++ symbol f) (treeFunction f)) funcs
+-- Ustalanie, które elementy są ostatnie
+lastFlags :: Eq a => [a] -> [Bool]
+lastFlags xs = map (== last xs) xs
 
-
-treeFunction :: Function -> [String]
-treeFunction (Function t name args body) =
-    [ "Return type: " ++ show t ] ++
-    [ "Args:" ] ++
-    treeArgs args ++
-    [ "Body:" ] ++
-    concatMap treeStmt body
-
-
-treeArgs :: [Arg] -> [String]
-treeArgs [] = ["(none)"]
-treeArgs xs = concatMap render xs
+-- Drukowanie Function
+printFunc :: Function -> String -> Bool -> [String]
+printFunc (Function ret name args body) prefix isLast =
+    header : subtrees
   where
-    render (t, s) = treeNode False (s ++ " : " ++ show t) []
+    connector = if isLast then "^-- " else "|-- "
+    newPrefix = if isLast then prefix ++ "    "
+                          else prefix ++ "|   "
 
+    header = prefix ++ connector ++ "Function: " ++ name
 
-treeStmt :: Stmt -> [String]
-treeStmt (Ret expr) =
-    treeNode False "Return" (treeExpr expr)
-treeStmt (Assign typ name expr) =
-    treeNode False ("Assign " ++ show typ ++ " "++ name) (treeExpr expr)
+    subtrees =
+        concat
+            [ printLeaf  newPrefix "Return type" (show ret) False
+            , printBody  newPrefix body
+            , printArgs  newPrefix args
+            ]
 
-treeExpr :: Expr -> [String]
-treeExpr n = treeNode False (show n) []
+-- Print list of arguments
+printArgs :: String -> [Arg] -> [String]
+printArgs prefix [] =
+    [prefix ++ "^-- Args: (none)"]
+printArgs prefix args =
+    (prefix ++ "|-- Args") :
+      concat (zipWith printArg args (lastFlags args))
+  where
+    printArg (t, sym) isLast =
+        let conn = if isLast then "^-- " else "|-- "
+        in [prefix ++ "    " ++ conn ++ show t ++ " " ++ sym]
 
+-- Print list of statements
+printBody :: String -> [Stmt] -> [String]
+printBody prefix [] =
+    [prefix ++ "^-- Body: (empty)"]
+printBody prefix stmts =
+    (prefix ++ "|-- Body") :
+      concat (zipWith printStmt stmts (lastFlags stmts))
 
---------------------------------------------------------------------------------
---  GENERIC TREE PRIMITIVES
---------------------------------------------------------------------------------
--- treeNode controls the hierarchical tree ASCII style.
--- 
---  isLast = True  → node is final child → "└──"
---  isLast = False → node has siblings  → "├──"
---
---  children are indented properly.
+printStmt :: Stmt -> Bool -> [String]
+printStmt stmt isLast =
+    let conn = if isLast then "|-- " else "^-- "
+    in ["    " ++ conn ++ show stmt]
 
-treeNode :: Bool -> String -> [String] -> [String]
-treeNode isLast label children =
-    let prefix = if isLast then "└── " else "├── "
-        childPrefix = if isLast then "    " else "│   "
-    in (prefix ++ label)
-       : indent childPrefix children
-
-indent :: String -> [String] -> [String]
-indent pref = map (pref ++)
+-- Utility for single leaf (Return type)
+printLeaf :: String -> String -> String -> Bool -> [String]
+printLeaf prefix label value isLast =
+    let conn = if isLast then "^-- " else "|-- "
+    in [prefix ++ conn ++ label ++ ": " ++ value]

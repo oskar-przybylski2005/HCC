@@ -13,7 +13,7 @@ data Token
     | TokenSymbol    String -- ^[A-Za-z_][A-Za-z0-9_]*$
     | TokenKeyWord   String -- int,chat,float,double ...
     | TokenIntLit    String -- 0,1,2,...
-    | TokenSciLit    String -- 10e100
+    | TokenSciLit    String -- 10e10
     | TokenHexLit    String -- 0x001, 0xFF, ...
     | TokenFloatLit  String -- 0.11, 32.14, ...
     | TokenSemi     -- semicolon
@@ -67,7 +67,8 @@ data Token
     | TokenTilda    -- ~
 
     | TokenInvalid  -- invalid token -> error
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
+
 
 printTokens :: [Token] -> IO()
 printTokens [] = return ()
