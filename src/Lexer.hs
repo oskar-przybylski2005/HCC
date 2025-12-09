@@ -4,18 +4,62 @@ import Data.List (stripPrefix, isPrefixOf)
 import Data.Maybe (fromMaybe)
 import Data.Char (digitToInt)
 
-import GHC.List (unsnoc,uncons)
+import GHC.List (uncons)
+
+import Text.Megaparsec.Pos (
+        SourcePos, unPos, sourceLine,
+        initialPos, sourceName,
+        mkPos, sourceColumn)
+
+data LocatedToken = LToken {
+    lToken :: Token,    -- Token
+    lPos   :: SourcePos,-- Where the Token is starting (file, line, column)
+    lText  :: String    -- Original Token Text eg. ("  int   ")
+} deriving (Show, Eq)
+
+printTokens :: [LocatedToken] -> IO ()
+printTokens [] = putStrLn "=== End Of Tokens ==="
+printTokens (LToken tok pos txt : xs) = do
+    let file = sourceName pos
+        line = unPos (sourceLine pos)
+        col  = unPos (sourceColumn pos)
+        loc  = file ++ ":" ++ show line ++ ":" ++ show col
+
+    -- Format: [plik:linia:kolumna] Token "OryginalnyTekst"
+    putStrLn $ "[" ++ loc ++ "] " ++ show tok ++ " " ++ show txt
+    printTokens xs
+
+-- advances position by one char
+advPos :: SourcePos -> Char -> SourcePos
+-- line, column -> line + 1, 1
+advPos pos '\n' = l `setLine` pos
+                    where l = getLine pos + 1
+                          setLine l p = p {sourceLine   = mkPos l,
+                                           sourceColumn = mkPos 1 }
+                          getLine     = unPos . sourceLine
+
+-- line, column -> line, column + x
+advPos pos c  = let col = unPos $ sourceColumn pos
+                    in pos { sourceColumn = mkPos (col + chars)}
+                    where chars = case c of
+                            '\t' -> 4 -- x = 4
+                            _    -> 1 -- x = 1
+
+-- advances position by string
+advStr :: SourcePos -> String -> SourcePos
+advStr pos str = foldl advPos pos str
+
 
 data Token
     = TokenEnd      -- EOF
-    | TokenDirective String -- #include / #define
-    | TokenInclArg   String -- <whatever>
-    | TokenSymbol    String -- ^[A-Za-z_][A-Za-z0-9_]*$
-    | TokenKeyWord   String -- int,chat,float,double ...
-    | TokenIntLit    String -- 0,1,2,...
-    | TokenSciLit    String -- 10e10
-    | TokenHexLit    String -- 0x001, 0xFF, ...
-    | TokenFloatLit  String -- 0.11, 32.14, ...
+    | TokenDirective-- #include / #define
+    | TokenInclArg  -- <whatever>
+    | TokenSymbol   -- ^[A-Za-z_][A-Za-z0-9_]*$
+    | TokenKeyWord  -- int,chat,float,double ...
+    | TokenIntLit   -- 0,1,2,...
+    | TokenSciLit   -- 10e10
+    | TokenHexLit   -- 0x001, 0xFF, ...
+    | TokenFloatLit -- 0.11, 32.14, ...
     | TokenSemi     -- semicolon
     | TokenParR     -- )
     | TokenParL     -- (
@@ -26,8 +70,8 @@ data Token
     | TokenComma    -- ,
     | TokenDot      -- .
     | TokenNewLine  -- \n
-    | TokenStrLit   String -- "whatever"
-    | TokenCharLit  Char   -- 'x'
+    | TokenStrLit   -- "whatever"
+    | TokenCharLit  -- 'x'
     | TokenComment  -- // comment or /* comment */
     | TokenEq       -- =
     | TokenDeq      -- ==
@@ -70,11 +114,6 @@ data Token
     deriving (Show, Eq, Ord)
 
 
-printTokens :: [Token] -> IO()
-printTokens [] = return ()
-printTokens (x:xs) = do
-    putStrLn $ show x
-    printTokens xs
 
 unescapeString :: String -> String
 unescapeString = go
@@ -135,9 +174,6 @@ isSymbol []     = False
 isSymbol (x:xs) =
         isSymbolStart x && all isSymbolMid xs
 
-isWhiteSpace :: Char -> Bool
-isWhiteSpace x = x `elem` [' ','\r','\t']
-
 isKeyWord :: String -> Bool
 isKeyWord str = str `elem` [
     "typedef", "struct", "union", "enum", "sizeof",
@@ -159,30 +195,34 @@ extractHex str = span isHex after0x
 
 -- takes a char and returns function that goes till it finds that char (that is not escaped)
 -- then returns whole symbol and rest
-readLit :: Char -> String -> (String, String)
+readLit :: Char -> SourcePos -> String -> (String, String, SourcePos)
 readLit end = go []
   where
-    go acc [] = (reverse acc, [])
-    go acc (x:xs)
+    go acc p [] = (reverse acc, [], p)
+    go acc p (x:xs)
       | x == '\\' = case xs of
-          []     -> go ('\\':acc) []
-          (y:ys) -> go (y:'\\':acc) ys
-      | x == end = (reverse (end:acc), xs)
-      | otherwise = go (x:acc) xs
+          []     -> go ('\\':acc) (advPos p x) []
+          (y:ys) -> let p' = advPos p x in go (y:'\\':acc) (advPos p' y) ys
+      | x == end = let p' = advPos p x in (reverse (x:acc), xs, p')
+      | otherwise = go (x:acc) (advPos p x) xs
 
 -- takes a str and returns function that goes till it finds that str
 -- then returns whole symbol and rest
-readLitStr :: String -> String -> (String, String)
-readLitStr end = go
+readLitStr :: String -> SourcePos -> String -> (String, String, SourcePos)
+readLitStr end startPos str = go [] startPos str
   where
     n = length end
-    go [] = ([], [])
-    go s@(x:xs)
-      | end `isPrefixOf` s = (end, drop n s)
-      | otherwise =
-          let (lit, rest) = go xs
-          in (x : lit, rest)
+    go acc p [] = (reverse acc, [], p)
+    go acc p s@(x:xs)
+      | end `isPrefixOf` s = 
+          let p' = advStr p end 
+          in (reverse acc ++ end, drop n s, p')
+      | otherwise = go (x:acc) (advPos p x) xs
 
+-- Helper to emit a token and advance recursion seamlessly
+emit :: Token -> String -> SourcePos -> String -> [LocatedToken]
+emit tok text pos rest = 
+    LToken tok pos text : lexe (advStr pos text) rest
 
 isValidIntSuffix :: String -> Bool
 isValidIntSuffix suf = suf `elem` validSuffixes
@@ -207,186 +247,142 @@ consumeIntSuffix xs =
   where
     isSuffixChar c = c `elem` "uUlL"
 
-lexe :: String -> [Token]
-lexe [] = [TokenEnd]
-lexe s@(x:xs)
-    | isWhiteSpace x = lexe xs
-    | x == '/' = case xs of
-        ('/':_) -> let
-                ( _ , rest) = readLit '\n' xs
-                 in TokenComment : lexe rest
-        ('=':ys) -> TokenDivEq   : lexe ys
-        ('*':_) -> let
-                ( _ , rest) = readLitStr "*/" xs
-                in TokenComment    : lexe rest
-        _       -> TokenDivide     : lexe xs
-
-    | x == '#' = let
-        (lit, rest) = readLit '\n' xs
-        fullDirective = x : lit
-        in TokenDirective (init fullDirective)
-        : lexe rest
-
+lexe :: SourcePos -> String -> [LocatedToken]
+lexe pos [] = [LToken TokenEnd pos ""]
+lexe pos s@(x:xs)
+    -- white spaces ' ','\t','\r'
+    | x `elem` [' ','\t','\r'] = lexe (advPos pos x) xs
+    -- preprocessor directives
+    | x == '#' =
+        let (lit, rest, newPos) = readLit '\n' pos xs
+        in LToken TokenDirective pos (x : lit) : lexe newPos rest
+    -- chars literals
     | x == '\'' =
-        let (lit, rest) = readLit '\'' xs
-            raw = x : lit
-            inner = case unsnoc raw of
-                Just (middle, _ ) -> drop 1 middle
-                Nothing           -> error "unexpected empty literal"
-            unescaped = unescapeString inner
-            char = case uncons unescaped of
-                Just (c, []) -> c
-                _ -> error ("char literal is longer than one char: "++ show raw)
-        in TokenCharLit char : lexe rest
-
+        let (raw, rest, newPos) = readLit '\'' pos xs
+        in LToken TokenCharLit   pos (x:raw)   : lexe newPos rest
+    -- string literals
     | x == '"' =
-        let (lit, rest) = readLit '"' xs
-            raw = x : lit
-            inner = case unsnoc raw of
-                Just (middle, _ ) -> drop 1 middle
-                Nothing           -> error "unexpected empty literal"
-            unescaped = unescapeString inner
-        in TokenStrLit unescaped : lexe rest
+        let (raw, rest, newPos) = readLit '"' pos xs
+        in LToken TokenStrLit    pos (x:raw)   : lexe newPos rest
+    -- hex numbers (prefix is 0x)
+    | isHexStart s =
+        let (hex, rest) = extractHex s
+        in emit TokenHexLit ("0x"++hex) pos rest
+    | x == '/' = case xs of
+        -- inline comments
+        ('/':_) -> let
+                (_, rest, newPos) = readLit '\n' pos xs -- consume comment content
+                fullText = '/' : take (length s - length rest - 1) xs -- reconstruct raw text
+                in LToken TokenComment pos fullText : lexe newPos rest
 
-    | x ==  '^' = case xs of
-        ('=':ys) -> TokenXorEq  : lexe ys
-        _ ->        TokenBitXor : lexe xs
+        -- multiline comments
+        ('*':_) -> let
+                (lit, rest, newPos) = readLitStr "*/" (advPos pos '/') xs
+                fullText = '/' : lit
+                in LToken TokenComment pos fullText : lexe newPos rest
+        -- /= operator
+        ('=':ys) -> emit TokenDivEq "/=" pos ys
+        _        -> emit TokenDivide "/" pos xs
+    -- operators
+    | x == '^' = case xs of
+                    ('=':ys)     -> emit TokenXorEq  "^="  pos ys
+                    _            -> emit TokenBitXor "^"   pos xs
+    | x == '%' = case xs of
+                    ('=':ys)     -> emit TokenModEq  "%="  pos ys
+                    _            -> emit TokenMod    "%"   pos xs
+    | x == '>' = case xs of
+                    ('>':'=':ys) -> emit TokenRSEq   ">>=" pos ys
+                    ('>':ys)     -> emit TokenRShift ">>"  pos ys
+                    ('=':ys)     -> emit TokenGeq    ">="  pos ys
+                    _            -> emit TokenGreater">"   pos xs
+    | x == '<' = case xs of 
+                    ('<':'=':ys) -> emit TokenLSEq   "<<=" pos ys
+                    ('<':ys)     -> emit TokenLShift "<<"  pos ys
+                    ('=':ys)     -> emit TokenLeq    "<="  pos ys
+                    _            -> emit TokenLess   "<"   pos xs
+    | x == '-' = case xs of
+                    ('-':ys)     -> emit TokenDminus "--"  pos ys
+                    ('>':ys)     -> emit TokenArrow  "->"  pos ys
+                    ('=':ys)     -> emit TokenMeq    "-="  pos ys
+                    _            -> emit TokenMinus  "-"   pos xs
+    | x == '+' = case xs of
+                    ('+':ys)     -> emit TokenDplus  "++"  pos ys
+                    ('=':ys)     -> emit TokenPeq    "+="  pos ys
+                    _            -> emit TokenPlus   "+"   pos xs
+    | x == '&' = case xs of
+                    ('&':ys)     -> emit TokenAnd    "&&"  pos ys
+                    ('=':ys)     -> emit TokenAndEq  "&="  pos ys
+                    _            -> emit TokenBitAnd "&"   pos xs
+    | x == '|' = case xs of
+                    ('|':ys)     -> emit TokenOr     "||"  pos ys
+                    ('=':ys)     -> emit TokenOrEq   "|="  pos ys
+                    _            -> emit TokenBitOr  "|"   pos xs
+    | x == '!' = case xs of
+                    ('=':ys)     -> emit TokenNeq    "!="  pos ys
+                    _            -> emit TokenNot    "!"   pos xs
+    | x == '*' = case xs of
+                    ('=':ys)     -> emit TokenSEq    "*="  pos ys
+                    _            -> emit TokenStar   "*"   pos xs
+    | x == '=' = case xs of
+                    ('=':ys)     -> emit TokenDeq    "=="  pos ys
+                    _            -> emit TokenEq     "="   pos xs
 
-    | x ==  '%' = case xs of
-        ('=':ys) -> TokenModEq  : lexe ys
-        _ ->        TokenMod    : lexe xs
-
-    | x ==  '>' = case xs of
-        ('>':'=':ys) -> TokenRSEq: lexe ys
-        ('>':ys) -> TokenRShift  : lexe ys
-        ('=':ys) -> TokenGeq     : lexe ys
-        _ -> TokenGreater        : lexe xs
-
-    | x ==  '<' = case xs of
-        ('<':'=':ys) -> TokenLSEq : lexe ys
-        ('<':ys) -> TokenLShift   : lexe ys
-        ('=':ys) -> TokenLeq      : lexe ys
-        _ -> TokenLess            : lexe xs
-
-    | x ==  '-' = case xs of
-        ('-':ys) -> TokenDminus : lexe ys
-        ('>':ys) -> TokenArrow  : lexe ys
-        ('=':ys) -> TokenMeq    : lexe ys
-        _ ->        TokenMinus  : lexe xs
-
-    | x ==  '+' = case xs of
-        ('+':ys) -> TokenDplus  : lexe ys
-        ('=':ys) -> TokenPeq    : lexe ys
-        _ -> TokenPlus          : lexe xs
-
-    | x ==  '&' = case xs of
-        ('&':ys) -> TokenAnd    : lexe ys
-        ('=':ys) -> TokenAndEq  : lexe ys
-        _ -> TokenBitAnd        : lexe xs
-
-    | x ==  '|' = case xs of
-        ('|':ys) -> TokenOr     : lexe ys
-        ('=':ys) -> TokenOrEq   : lexe ys
-        _ -> TokenBitOr         : lexe xs
-
-    | x ==  '!' = case xs of
-        ('=':ys) -> TokenNeq    : lexe ys
-        _  -> TokenNot          : lexe xs
-
-    | x ==  '*' = case xs of
-        ('=':ys) -> TokenSEq    : lexe ys
-        _ -> TokenStar          : lexe xs
-
-    | x ==  '=' = case xs of
-        ('=':ys) -> TokenDeq    : lexe ys
-        _ -> TokenEq            : lexe xs
-
-    | isHexStart s = let
-        (hex, rest) = extractHex s
-        full = "0x" ++ hex
-        in TokenHexLit full : lexe rest
-
-    | x == '.' = let
-        (float, rest) = span isNum xs
-        baseFloat = "0." ++ float
+    -- floats starting with .
+    | x == '.' && maybe False (isNum . fst) (uncons xs) = let
+        ( _ , rest) = span isNum xs
         r = case rest of
-            ('f':xs) -> xs   -- .14f
-            ('F':xs) -> xs   -- .14F
-            _        -> rest -- .14
-        in TokenFloatLit baseFloat : lexe r
-
+            ('f':rs) -> rs
+            ('F':rs) -> rs
+            _        -> rest
+        consumed = take (length s - length r) s
+        in emit TokenFloatLit consumed pos r
+    -- numbers
     | isNum x = let
-        (prefix, rest) = span isNum xs
-        fullPrefix = x : prefix
-        (kind, val, toParse) = case rest of
+        ( _ , rest) = span isNum xs
+        (kind, toParse) = case rest of
+            -- Floats
+            ('.': ys ) -> (TokenFloatLit, r)
+               where ( _ , restF) = span isNum ys
+                     r = case restF of ('f':zs)->zs; ('F':zs)->zs; _->restF
+            -- Scientific notation
+            ('e': y: ys ) | (isNum y || y=='-') -> (TokenSciLit, r)
+               where ( _ , restS) = span isNum ys
+                     r = case restS of ('f':zs)->zs; ('F':zs)->zs; _->restS
+            -- Normal ints
+            _ -> (TokenIntLit, rest')
+               where ( _ , rest') = consumeIntSuffix rest
 
-            -- floats starting with int
-            ('.': ys ) -> (TokenFloatLit, baseFloat, r)
-             where
-                (fracPart, restFloat) = span isNum ys
-                baseFloat = fullPrefix ++ "." ++ fracPart ++ "0"
-                -- ++ "0" is for 3.
-                r = case restFloat of
-                    ('f':xs) ->  xs -- 3.14f
-                    ('F':xs) ->  xs -- 3.14F
-                    _        ->  restFloat -- 3.14
+        -- Crucial: reconstruct original text to ensure correct position advancement
+        consumedRaw = take (length s - length toParse) s
+        in emit kind consumedRaw pos toParse
 
-            -- scientific notation with base "e" and exponent + optional f/F at the end
-            ('e': y: ys ) | (isNum y || y=='-') -> (TokenSciLit, baseSci, r) where
-                (exponent, restSci) = span isNum ys
-                baseSci = fullPrefix ++ "e" ++ [y] ++ exponent
-                r = case restSci of
-                    ('f':xs) -> xs -- 3e14f
-                    ('F':xs) -> xs -- 3e14F
-                    _        -> restSci -- 3e14
-
-            -- normal ints
-            -- unsigned
-            _ -> (TokenIntLit, fullPrefix ++ suf, rest')
-                where (suf, rest') = consumeIntSuffix rest
-
-        in kind val : lexe toParse
-
+    -- symbols
     | isSymbolStart x = let
         (sym, rest) = span isSymbolMid xs
         full = x : sym
         tokenKind | isKeyWord full = TokenKeyWord
                   | otherwise      = TokenSymbol
-              in tokenKind full : lexe rest
+        in emit tokenKind full pos rest
 
+    -- other one char tokens and Invalid Token
     | otherwise =
         let tk = tokenKind x
+            txt = [x]
         in if tk == TokenInvalid
-            then [TokenInvalid]
-            else tk : lexe xs
+            then [LToken TokenInvalid pos txt]
+            else emit tk txt pos xs
      where
-        tokenKind c
-            | c == ';'  = TokenSemi
-            | c == '('  = TokenParL
-            | c == ')'  = TokenParR
-            | c == '{'  = TokenBraL
-            | c == '}'  = TokenBraR
-            | c == '['  = TokenSqrL
-            | c == ']'  = TokenSqrR
-            | c == ','  = TokenComma
-            | c == '.'  = TokenDot
-            | c == ':'  = TokenDblDot
-            | c == '?'  = TokenTernary
-            | c == '~'  = TokenTilda
-            | c == '\n' = TokenNewLine
-            | otherwise = TokenInvalid
+       tokenKind c
+           | c == ';' = TokenSemi     | c == '(' = TokenParL    | c == ')' = TokenParR
+           | c == '{' = TokenBraL     | c == '}' = TokenBraR    | c == '[' = TokenSqrL
+           | c == ']' = TokenSqrR     | c == ',' = TokenComma   | c == '.' = TokenDot
+           | c == ':' = TokenDblDot   | c == '?' = TokenTernary | c == '~' = TokenTilda
+           | c == '\n' = TokenNewLine | otherwise = TokenInvalid
 
-lexer :: String -> IO([Token])
+-- PUBILC API
+-- wraper for reading from file
+lexer :: String -> IO [LocatedToken]
 lexer fileName = do
-                fileContent <- readFile fileName
-                return $ lexe fileContent
-
--- main :: IO()
--- main = do
---    args <- getArgs
---    listOfTokenLists <- mapM lexer args
---    let tokens = concat listOfTokenLists
---    printTokens tokens
-    -- printTokens $ filter (\x -> kind x == TokenComment) tokens
-
-
+    fileContent <- readFile fileName
+    let startPos = initialPos fileName
+    return $ lexe startPos fileContent
