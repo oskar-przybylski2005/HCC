@@ -1,23 +1,26 @@
 module Main (main) where
 
 import System.Environment (getArgs)
-
+import System.Exit (exitFailure)
+import System.IO (hPutStrLn, stderr)
+import Text.Megaparsec (errorBundlePretty)
 
 import qualified Lexer
--- import qualified Parser
+import qualified Parser
 -- import qualified PrettyTree
+
 
 main :: IO ()
 main = do
     args <- getArgs
-    let args' = case args of
-            [] -> error "No files specified"
-            a  -> a
-    tokens <- concat <$> mapM Lexer.lexer args'
+    let fileName = case args of
+            (a:_) -> a
+            _     -> error "No files specified"
+    tokens <- Lexer.lexer fileName
     Lexer.printTokens tokens
-
-    
-
---    case Parser.parse tokens of
---        Just (prog, []) -> PrettyTree.printProgram prog
---        _               -> putStrLn "Parse error"
+    case Parser.parse fileName tokens of
+        Right p -> print p
+        Left errBundle -> do
+            hPutStrLn stderr "\n Error while parsing: "
+            hPutStrLn stderr (errorBundlePretty errBundle)
+            exitFailure

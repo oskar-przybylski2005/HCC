@@ -22,12 +22,16 @@ data LocatedToken = LToken {
 } deriving (Show, Eq, Ord)
 
 instance TM.VisualStream [LocatedToken] where
-    showTokens   _ tokens = unwords . map lText . NE.toList $ tokens
+    showTokens   _ tokens = unwords . map (\t -> case lToken t of
+                                            TokenNewLine -> "\"\\n\" (newline)"
+                                            TokenSpace   -> "\" \" (space)"
+                                            _ -> "\"" ++ lText t ++ "\"")
+                            . NE.toList $ tokens
     tokensLength _ tokens = NE.length tokens
 
 instance TM.TraversableStream [LocatedToken] where
     reachOffset targetOffset pst = let
-            (pre, post) = splitAt (targetOffset - TM.pstateOffset pst) (TM.pstateInput pst)
+            (pre, post) = splitAt ((targetOffset - TM.pstateOffset pst)) (TM.pstateInput pst)
             newSourcePos = case post of
                 (x:_) -> lPos x
                 []    -> case reverse pre of
@@ -82,6 +86,8 @@ advStr pos str = foldl advPos pos str
 
 data Token
     = TokenEnd      -- EOF
+    | TokenSpace    -- ' '
+    | TokenTab      -- '\t'
     | TokenDirective-- #include / #define
     | TokenInclArg  -- <whatever>
     | TokenSymbol   -- ^[A-Za-z_][A-Za-z0-9_]*$
@@ -141,7 +147,7 @@ data Token
     | TokenTilda    -- ~
 
     | TokenInvalid  -- invalid token -> error
-    deriving (Show, Eq, Ord)
+    deriving (Eq,Show ,Ord)
 
 
 
@@ -280,8 +286,6 @@ consumeIntSuffix xs =
 lexe :: SourcePos -> String -> [LocatedToken]
 lexe pos [] = [LToken TokenEnd pos ""]
 lexe pos s@(x:xs)
-    -- white spaces ' ','\t','\r'
-    | x `elem` [' ','\t','\r'] = lexe (advPos pos x) xs
     -- preprocessor directives
     | x == '#' =
         let (lit, rest, newPos) = readLit '\n' pos xs
@@ -364,7 +368,8 @@ lexe pos s@(x:xs)
             ('f':rs) -> rs
             ('F':rs) -> rs
             _        -> rest
-        consumed = take (length s - length r) s
+        ( consumed , _ ) = span (\x -> isNum x || x == '.' ||  x == 'e') $ -- removes f/F from end
+                            "0" <> take (length s - length r) s  -- adds 0 in front
         in emit TokenFloatLit consumed pos r
     -- numbers
     | isNum x = let
@@ -383,7 +388,7 @@ lexe pos s@(x:xs)
                where ( _ , rest') = consumeIntSuffix rest
 
         -- Crucial: reconstruct original text to ensure correct position advancement
-        consumedRaw = take (length s - length toParse) s
+        ( consumedRaw, _ ) = span (\x -> isNum x || x == '.' ||  x == 'e') $ take (length s - length toParse) s
         in emit kind consumedRaw pos toParse
 
     -- symbols
@@ -403,11 +408,12 @@ lexe pos s@(x:xs)
             else emit tk txt pos xs
      where
        tokenKind c
-           | c == ';' = TokenSemi     | c == '(' = TokenParL    | c == ')' = TokenParR
-           | c == '{' = TokenBraL     | c == '}' = TokenBraR    | c == '[' = TokenSqrL
-           | c == ']' = TokenSqrR     | c == ',' = TokenComma   | c == '.' = TokenDot
-           | c == ':' = TokenDblDot   | c == '?' = TokenTernary | c == '~' = TokenTilda
-           | c == '\n' = TokenNewLine | otherwise = TokenInvalid
+           | c == ';' = TokenSemi     | c == '(' = TokenParL    | c == ')'  = TokenParR
+           | c == '{' = TokenBraL     | c == '}' = TokenBraR    | c == '['  = TokenSqrL
+           | c == ']' = TokenSqrR     | c == ',' = TokenComma   | c == '.'  = TokenDot
+           | c == ':' = TokenDblDot   | c == '?' = TokenTernary | c == '~'  = TokenTilda
+           | c == '\n' = TokenNewLine | c == ' ' = TokenSpace   | c == '\t' = TokenTab
+           | otherwise = TokenInvalid
 
 -- PUBILC API
 -- wraper for reading from file
