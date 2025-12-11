@@ -18,16 +18,17 @@ module Parser.AST where
 -- AST types
 type Program = [FunctionDecl]
 data FunctionDecl = FunctionDecl {
-    retType :: Type,
-    symbol  :: String,
-    args    :: [Arg],
-    body    :: [Stmt]
+    funcRetType :: Type,
+    funcSymbol  :: String,
+    funcArgs    :: [Arg],
+    funcBody    :: [Stmt]
 } deriving (Show,Eq)
 
 type Arg  = (Type, String)
 
 data Stmt = Ret Expr
-          | VarDecl   Type   String Expr
+          | VarDecl  Type   String Expr
+          | FuncCall String [Expr]
           | ExprStmt Expr
           | IfStmt {
              iCondition  ::  Expr,

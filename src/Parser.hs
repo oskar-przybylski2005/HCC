@@ -19,6 +19,7 @@ runP fileName input parser =
 parse :: String -> Input -> Either Error Program
 parse fileName tokens =
     runP fileName tokens $
+        skipWhitespace *>
         many parseFunctionDecl
         <* parseToken TokenEnd
         <* eof

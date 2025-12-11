@@ -84,3 +84,19 @@ executable hcc
 
     -- Base language which the package is written in.
     default-language: Haskell2010
+
+test-suite lexer-tests
+    type:             exitcode-stdio-1.0
+    main-is:          Spec.hs
+    hs-source-dirs:   test, src
+
+    build-depends:    base ^>=4.18.3.0,
+                      megaparsec >= 9.7.0,
+                      parser-combinators,
+                      text,
+                      hspec,
+                      tasty >= 1.4,
+                      tasty-hspec >= 1.2,
+                      tasty-golden >= 2.3,
+                      bytestring,
+                      filepath,

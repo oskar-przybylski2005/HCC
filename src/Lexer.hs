@@ -3,7 +3,7 @@ module Lexer where
 
 import Data.List (stripPrefix, isPrefixOf)
 import Data.Maybe (fromMaybe)
-import Data.Char (digitToInt)
+import Data.Char (digitToInt, isOctDigit)
 
 import GHC.List (uncons)
 
@@ -171,7 +171,7 @@ unescapeString = go
                 else x : go xs
 
         -- octal escape \123
-        d | d >= '0' && d <= '7' ->
+        d | isOctDigit d ->
             let (os, rest) = span (`elem` ['0'..'7']) (x:xs)
                 val = foldl (\acc c -> acc * 8 + digitToInt c) 0 os
             in toEnum val : go rest
@@ -328,7 +328,7 @@ lexe pos s@(x:xs)
                     ('>':ys)     -> emit TokenRShift ">>"  pos ys
                     ('=':ys)     -> emit TokenGeq    ">="  pos ys
                     _            -> emit TokenGreater">"   pos xs
-    | x == '<' = case xs of 
+    | x == '<' = case xs of
                     ('<':'=':ys) -> emit TokenLSEq   "<<=" pos ys
                     ('<':ys)     -> emit TokenLShift "<<"  pos ys
                     ('=':ys)     -> emit TokenLeq    "<="  pos ys

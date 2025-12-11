@@ -20,20 +20,20 @@ printTree funcs = mapM_ printFunction funcs
 -- 2. Wypisywanie Funkcji
 printFunction :: FunctionDecl -> IO ()
 printFunction f = do
-    putStrLn $ "FunctionDecl: " ++ symbol f ++ " (returns " ++ show (retType f) ++ ")"
+    putStrLn $ "FunctionDecl: " ++ funcSymbol f ++ " (returns " ++ show (funcRetType f) ++ ")"
     
     -- Wypisz argumenty
-    if null (args f)
+    if null (funcArgs f)
         then printNode 1 "Args: None"
         else do
             printNode 1 "Args:"
-            mapM_ (\(t, n) -> printNode 2 (n ++ " :: " ++ show t)) (args f)
+            mapM_ (\(t, n) -> printNode 2 (n ++ " :: " ++ show t)) (funcArgs f)
     
     -- Wypisz ciało funkcji (instrukcje)
     printNode 1 "Body:"
-    if null (body f) 
+    if null (funcBody f) 
         then printNode 2 "(empty body)"
-        else mapM_ (printStmt 2) (body f)
+        else mapM_ (printStmt 2) (funcBody f)
     
     putStrLn "" -- Pusta linia między funkcjami
 
@@ -49,6 +49,10 @@ printStmt lvl (Ret expr) = do
 printStmt lvl (VarDecl t name expr) = do
     printNode lvl $ "VarDecl: " ++ name ++ " :: " ++ show t
     printExpr (lvl + 1) expr
+
+printStmt lvl (FuncCall s args ) = do
+    printNode lvl $ "FuncCall: " ++ s
+    mapM_ (printExpr (lvl+2)) args
 
 -- Samodzielne wyrażenie (np. wywołanie funkcji, przypisanie)
 printStmt lvl (ExprStmt expr) = do

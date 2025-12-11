@@ -40,8 +40,9 @@ parseFunctionDecl = do
     b  <- parseBlock
     skipWhitespace
     pure FunctionDecl {
-        retType = rt,
-        symbol  = sb,
-        args    = a,
-        body    = b
+        funcRetType = rt,
+        funcSymbol  = sb,
+        funcArgs    = a,
+        funcBody    = b
         }
+

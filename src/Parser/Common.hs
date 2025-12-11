@@ -11,7 +11,6 @@ type Error = ParseErrorBundle [LocatedToken] Void
 type Parser a = Parsec Void Input a
 type Input = [LocatedToken]
 
-
 -- HELPERS
 emitUnexpected :: MonadFail m => String -> m a
 emitUnexpected s = fail $ "Unexpected symbol: " <> ("\""++s++"\"")
