@@ -22,16 +22,15 @@ data LocatedToken = LToken {
 } deriving (Show, Eq, Ord)
 
 instance TM.VisualStream [LocatedToken] where
-    showTokens   _ tokens = unwords . map (\t -> case lToken t of
+    showTokens   _ = unwords . map (\t -> case lToken t of
                                             TokenNewLine -> "\"\\n\" (newline)"
                                             TokenSpace   -> "\" \" (space)"
-                                            _ -> "\"" ++ lText t ++ "\"")
-                            . NE.toList $ tokens
-    tokensLength _ tokens = NE.length tokens
+                                            _ -> "\"" ++ lText t ++ "\"") . NE.toList
+    tokensLength _ = NE.length
 
 instance TM.TraversableStream [LocatedToken] where
     reachOffset targetOffset pst = let
-            (pre, post) = splitAt ((targetOffset - TM.pstateOffset pst)) (TM.pstateInput pst)
+            (pre, post) = splitAt (targetOffset - TM.pstateOffset pst) (TM.pstateInput pst)
             newSourcePos = case post of
                 (x:_) -> lPos x
                 []    -> case reverse pre of
@@ -81,7 +80,7 @@ advPos pos c  = let col = unPos $ sourceColumn pos
 
 -- advances position by string
 advStr :: SourcePos -> String -> SourcePos
-advStr pos str = foldl advPos pos str
+advStr = foldl advPos
 
 
 data Token
@@ -138,7 +137,7 @@ data Token
     | TokenRShift   -- >>
     | TokenRSEq     -- >>=
     | TokenGreater  -- >
-    | TokenDivide   -- /
+    | TokenSlashR   -- /
     | TokenDivEq    -- /=
     | TokenMod      -- %
     | TokenModEq    -- %=
@@ -245,13 +244,13 @@ readLit end = go []
 -- takes a str and returns function that goes till it finds that str
 -- then returns whole symbol and rest
 readLitStr :: String -> SourcePos -> String -> (String, String, SourcePos)
-readLitStr end startPos str = go [] startPos str
+readLitStr end = go []
   where
     n = length end
     go acc p [] = (reverse acc, [], p)
     go acc p s@(x:xs)
-      | end `isPrefixOf` s = 
-          let p' = advStr p end 
+      | end `isPrefixOf` s =
+          let p' = advStr p end
           in (reverse acc ++ end, drop n s, p')
       | otherwise = go (x:acc) (advPos p x) xs
 
@@ -315,8 +314,8 @@ lexe pos s@(x:xs)
                 fullText = '/' : lit
                 in LToken TokenComment pos fullText : lexe newPos rest
         -- /= operator
-        ('=':ys) -> emit TokenDivEq "/=" pos ys
-        _        -> emit TokenDivide "/" pos xs
+        ('=':ys) -> emit TokenDivEq  "/=" pos ys
+        _        -> emit TokenSlashR "/"  pos xs
     -- operators
     | x == '^' = case xs of
                     ('=':ys)     -> emit TokenXorEq  "^="  pos ys
@@ -380,7 +379,7 @@ lexe pos s@(x:xs)
                where ( _ , restF) = span isNum ys
                      r = case restF of ('f':zs)->zs; ('F':zs)->zs; _->restF
             -- Scientific notation
-            ('e': y: ys ) | (isNum y || y=='-') -> (TokenSciLit, r)
+            ('e': y: ys ) | isNum y || y=='-' -> (TokenSciLit, r)
                where ( _ , restS) = span isNum ys
                      r = case restS of ('f':zs)->zs; ('F':zs)->zs; _->restS
             -- Normal ints

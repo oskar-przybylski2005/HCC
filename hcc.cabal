@@ -62,15 +62,22 @@ executable hcc
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules:    Lexer, Parser
+    other-modules:    Lexer, PrettyTree, Parser,
+                      Parser.AST,
+                      Parser.Common,
+                      Parser.FunctionParser,
+                      Parser.ExprParser,
+                      Parser.TypeParser,
+                      Parser.StmtParser
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.21.0.0,
+    build-depends:    base ^>=4.18.3.0,
                       megaparsec >= 9.7.0,
-                      text
+                      text,
+                      parser-combinators
 
     -- Directories containing source files.
     hs-source-dirs:   app, src
