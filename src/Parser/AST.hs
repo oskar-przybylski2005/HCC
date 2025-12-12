@@ -1,34 +1,25 @@
 module Parser.AST where
 
--- Supported C Language Backus-Naur Form blueprint
--- <program>  ::= <function>
---
--- <type>     ::= "int" | "float" | "void" | "char"
---
--- <function> ::= <type> <id> "(" [<arg>] ")" "{" [<stmt>] "}"
---
--- <arg>      ::= <type> <id> {","}
---
--- <stmt>     ::= "return" {<expr>} ";"
---             |  <type> <id> "=" <expr> ";"
---             |  <id> "(" [ <expr> {","} ] ")" ";" -- TODO function calls
---
--- <expr>     ::= <int> | <float>
-
 -- AST types
 type Program = [FunctionDecl]
 data FunctionDecl = FunctionDecl {
-    funcRetType :: Type,
-    funcSymbol  :: String,
-    funcArgs    :: [Arg],
-    funcBody    :: [Stmt]
+      funcRetType :: Type,
+      funcSymbol  :: String,
+      funcArgs    :: [Arg],
+      funcBody    :: [Stmt]
 } deriving (Show,Eq)
 
 type Arg  = (Type, String)
 
+data StorageSpecifier = Static
+                      | Extern
+                      | Auto
+                      | Register
+                      | ScNone
+    deriving (Show,Eq)
+
 data Stmt = Ret Expr
-          | VarDecl  Type   String Expr
-          | FuncCall String [Expr]
+          | VarDecl  Type String (Maybe Expr)
           | ExprStmt Expr
           | IfStmt {
              iCondition  ::  Expr,
@@ -47,7 +38,7 @@ data Stmt = Ret Expr
           }
     deriving (Show,Eq)
 
-data ForInit = InitDecl Type String Expr -- int i = 0
+data ForInit = InitDecl Type String Expr-- int i = 0 / int i;
              | InitExpr Expr             -- i = 0
              | NoInit                    -- no init
     deriving (Show,Eq)
@@ -56,6 +47,7 @@ data Expr = IExp   Integer
           | CExp   Char
           | FExp   Float
           | SExp   String
+          | FuncCall String [Expr]
           | Assign   String Expr
           | BinExp   BinOp   Expr Expr
           | UnaryExp UnaryOp Expr

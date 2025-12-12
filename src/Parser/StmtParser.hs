@@ -36,10 +36,12 @@ parseVarDeclStmt = do
     skipSpaces
     symbol <- readToken TokenSymbol
     skipSpaces
-    void $ parseToken TokenEq
-    skipSpaces
-    expr <- parseExpr
-    skipSpaces
+    expr <- optional $ do
+        void $ parseToken TokenEq
+        skipSpaces
+        expr <- parseExpr
+        skipSpaces
+        pure expr
     void $ parseToken TokenSemi
     pure $ VarDecl typ symbol expr
 
@@ -136,26 +138,10 @@ parseWhileStmt = do
         wBody= body
     }
 
-parseFunctionCall :: Parser Stmt
-parseFunctionCall = do
-    symbol <- readToken TokenSymbol
-
-    skipWhitespace
-    void $ parseToken TokenParL
-
-    args <- parseExpr `sepBy` parseToken TokenComma
-
-    void $ parseToken TokenParR
-
-    void $ optional $ parseToken TokenSemi
-
-    pure $ FuncCall symbol args
-
 parseStmt :: Parser Stmt
 parseStmt = do
     skipWhitespace
     stmt <-  parseReturnStmt
-         <|> parseFunctionCall
          <|> parseVarDeclStmt
          <|> parseIfStmt
          <|> parseForStmt

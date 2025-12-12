@@ -15,7 +15,6 @@ runP fileName input parser =
         Left err -> Left err
 
 -- PUBLIC API
-
 parse :: String -> Input -> Either Error Program
 parse fileName tokens =
     runP fileName tokens $
@@ -23,4 +22,3 @@ parse fileName tokens =
         many parseFunctionDecl
         <* parseToken TokenEnd
         <* eof
-

@@ -23,6 +23,20 @@ parseUnaryPostfix = choice
             [ IncrementPost  <$ readToken TokenDplus
             , DecrementPost  <$ readToken TokenDminus
             ]
+            
+parseSymbolOrCall :: Parser Expr
+parseSymbolOrCall = do
+    name <- readToken TokenSymbol
+    isCall <- optional $ lookAhead $ parseToken TokenParL
+    
+    case isCall of
+        Just _ -> do
+            void $ parseToken TokenParL
+            args <- parseExpr `sepBy` parseToken TokenComma
+            void $ parseToken TokenParR
+            return $ FuncCall name args
+        Nothing -> 
+            return $ SExp name
 
 -- atomic terms like 5, 0, (3+2), etc..
 parseTerm :: Parser Expr
@@ -35,7 +49,7 @@ parseTerm = do
             , FExp . read  <$>(readToken TokenFloatLit
                            <|> readToken TokenSciLit)
             , CExp . (!!1) <$> readToken TokenCharLit
-            , SExp         <$> readToken TokenSymbol
+            , parseSymbolOrCall
             ]
         unaryOpPost <- optional parseUnaryPostfix
         skipWhitespace

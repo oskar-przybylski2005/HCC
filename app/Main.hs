@@ -17,7 +17,7 @@ main = do
             (a:_) -> a
             _     -> error "No files specified"
     tokens <- Lexer.lexer fileName
-    -- Lexer.printTokens tokens
+    Lexer.printTokens tokens
     case Parser.parse fileName tokens of
         Right p -> PrettyTree.printTree p
         Left errBundle -> do

@@ -1,6 +1,7 @@
 module PrettyTree where
 
 import Parser.AST
+import Data.Maybe
 
 --------------------------------------------------------------------------------
 -- Funkcje do ładnego wypisywania (Pretty Printer)
@@ -48,11 +49,9 @@ printStmt lvl (Ret expr) = do
 -- Deklaracja zmiennej
 printStmt lvl (VarDecl t name expr) = do
     printNode lvl $ "VarDecl: " ++ name ++ " :: " ++ show t
-    printExpr (lvl + 1) expr
-
-printStmt lvl (FuncCall s args ) = do
-    printNode lvl $ "FuncCall: " ++ s
-    mapM_ (printExpr (lvl+2)) args
+    if null expr
+        then printNode (lvl + 1) "(empty)"
+        else printExpr (lvl + 1) (fromJust expr)
 
 -- Samodzielne wyrażenie (np. wywołanie funkcji, przypisanie)
 printStmt lvl (ExprStmt expr) = do
@@ -124,6 +123,10 @@ printExpr lvl (IExp i) = printNode lvl $ "Int:    " ++ show i
 printExpr lvl (FExp f) = printNode lvl $ "Float:  " ++ show f
 printExpr lvl (CExp c) = printNode lvl $ "Char:   '" ++ [c] ++ "'"
 printExpr lvl (SExp s) = printNode lvl $ "Symbol: \"" ++ s ++ "\"" -- Zmienione na cudzysłów dla jasności
+
+printExpr lvl (FuncCall s args ) = do
+    printNode lvl $ "FuncCall: " ++ s
+    mapM_ (printExpr (lvl+2)) args
 
 printExpr lvl (Assign name expr) = do
     printNode lvl $ "Assign To: " ++ name
