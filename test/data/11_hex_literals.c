@@ -1,0 +1,9 @@
+int a = 0x1A;
+int b = 0X2b; 
+int c = 0x;
+int d = 0x123ZZ;
+int e = 0xabcdef;
+int f = 0xABCDEF;
+
+/* 0xFF in comment */
+// 0xAA in comment
