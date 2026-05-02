@@ -1,6 +1,9 @@
-module Parser.StmtParser where
+module Parser.StmtParser(
+    parseBlock,
+    parseVarD
+) where
 
-import Lexer
+import Common
 import Text.Megaparsec hiding (Token)
 import Control.Monad (void)
 
@@ -10,54 +13,47 @@ import Parser.AST
 import Parser.ExprParser
 import Parser.TypeParser
 
-parseReturnStmt :: Parser Stmt
-parseReturnStmt = do
-    matchText "return"
-    skipSpaces
-    expr <- parseExpr
-    void $ parseToken TokenSemi
-    pure $ Ret expr
 
-parseBlock :: Parser [Stmt]
+parseBlock :: Parser [Statement]
 parseBlock = do
     void $ parseToken TokenBraL
 
-    skipWhitespace
     stmts <- many parseStmt
-    skipWhitespace
 
     void $ parseToken TokenBraR
 
     pure stmts
 
-parseVarDeclStmt :: Parser Stmt
-parseVarDeclStmt = do
+
+parseVarD :: Parser Statement
+parseVarD = do
+    storageSpecifier <- parseStorageSpecifier
     typ <- parseType
-    skipSpaces
     symbol <- readToken TokenSymbol
-    skipSpaces
     expr <- optional $ do
         void $ parseToken TokenEq
-        skipSpaces
-        expr <- parseExpr
-        skipSpaces
-        pure expr
-    void $ parseToken TokenSemi
-    pure $ VarDecl typ symbol expr
+        parseExpr
+    pure $ case expr of
+        Just e  ->  VarDefinitionStmt storageSpecifier typ symbol e
+        Nothing ->  VarDeclarationStmt storageSpecifier typ symbol
 
-parseIfStmt :: Parser Stmt
+-- private
+parseReturnStmt :: Parser Statement
+parseReturnStmt = do
+    parseKeyword "return"
+    expr <- optional parseExpr
+    void $ parseToken TokenSemi
+    pure $ Ret expr
+
+parseIfStmt :: Parser Statement
 parseIfStmt = do
-    void $ matchText "if"
-    skipWhitespace
+    parseKeyword "if"
     cond <- parens parseExpr
-    skipWhitespace
     body <- parseBlock <|>
             (:[]) <$> parseStmt
-    skipWhitespace
 
     elseBody <- (do
-        void $ matchText "else"
-        skipWhitespace
+        parseKeyword "else"
         parseBlock
       ) <|> pure []
 
@@ -67,57 +63,27 @@ parseIfStmt = do
         iElseBlock=elseBody
     }
 -- i = 5; funct() itp
-parseExprStmt :: Parser Stmt
-parseExprStmt = do
-    expr <- parseExpr
-    void $ parseToken TokenSemi
-    pure $ ExprStmt expr
+parseExprStmt :: Parser Statement
+parseExprStmt = ExprStmt <$> parseExpr
 
-parseForInitDecl :: Parser ForInit
-parseForInitDecl = do
-    typ    <- parseType
-    skipSpaces
-    symbol <- readToken TokenSymbol
-    skipSpaces
-    void $ parseToken TokenEq
-    skipSpaces
-    InitDecl typ symbol <$> parseExpr
-
-parseForAssignInit :: Parser ForInit
-parseForAssignInit = do
-    symbol <- readToken TokenSymbol
-    skipSpaces
-    void $ parseToken TokenEq
-    skipSpaces
-    InitExpr . Assign symbol <$> parseExpr
-
-parseForInit :: Parser ForInit
-parseForInit = do
-        init <-  parseForInitDecl
-             <|> parseForAssignInit
-             <|> (NoInit   <$ parseToken TokenSemi)
-        void $ optional $ parseToken TokenSemi
-        pure init
-
-parseForPar :: Parser (ForInit, Expr, Expr)
-parseForPar = do
-    void $ parseToken TokenParL
-    skipSpaces
-    init <- parseForInit
-    cond <- parseExpr
-    void $ parseToken TokenSemi
-    step <- parseExpr
-    skipSpaces
-    void $ parseToken TokenParR
-    pure (init, cond, step)
-
-parseForStmt :: Parser Stmt
+parseForStmt :: Parser Statement
 parseForStmt = do
-    void $ matchText "for"
-    skipSpaces
-    (init, cond, step) <- parseForPar
-    body <- parseBlock <|>
-                 (:[]) <$> parseStmt
+    void $ parseKeyword "for"
+
+    void $ parseToken TokenParL
+
+    init <- optional $ try parseVarD <|> parseExprStmt
+    void $ parseToken TokenSemi
+
+    cond <- optional parseExpr
+    void $ parseToken TokenSemi
+
+    step <- optional parseExpr
+
+    void $ parseToken TokenParR
+
+    body <- optional $ parseBlock
+                       <|> (:[]) <$> parseStmt
 
     pure ForStmt {
         fInit= init,
@@ -126,26 +92,28 @@ parseForStmt = do
         fBody=body
     }
 
-parseWhileStmt :: Parser Stmt
+parseWhileStmt :: Parser Statement
 parseWhileStmt = do
-    void $ matchText "while"
-    skipWhitespace
+    void $ parseKeyword "while"
     cond <- parseExpr
     body <- parseBlock <|>
                  (:[]) <$> parseStmt
+
     pure WhileStmt {
         wCond= cond,
         wBody= body
     }
 
-parseStmt :: Parser Stmt
-parseStmt = do
-    skipWhitespace
-    stmt <-  parseReturnStmt
-         <|> parseVarDeclStmt
+parseNullStmt :: Parser Statement
+parseNullStmt = do
+    void $ parseToken TokenSemi
+    pure NullStmt
+
+parseStmt :: Parser Statement
+parseStmt =  parseReturnStmt
+         <|> try parseVarD
          <|> parseIfStmt
          <|> parseForStmt
          <|> parseWhileStmt
          <|> parseExprStmt
-    skipWhitespace
-    pure stmt
+         <|> parseNullStmt

@@ -1,6 +1,6 @@
 module Parser.FunctionParser where
 
-import Lexer
+import Common
 import Text.Megaparsec hiding (Token)
 import Control.Monad (void)
 
@@ -13,36 +13,29 @@ import Parser.StmtParser
 parseArg :: Parser Arg
 parseArg = do
     typ    <- parseType
-    skipSpaces
-    symbol <- readToken TokenSymbol
-    pure (typ, symbol)
+    symbol <- optional $ readToken TokenSymbol
+    pure $ Arg typ symbol
 
 parseArgs :: Parser [Arg]
 parseArgs = do
     void $ parseToken TokenParL
-    skipSpaces
-    let sep = parseToken TokenComma *> skipSpaces
+    let sep = parseToken TokenComma 
     args <- [] <$  matchText "void"
                <|> parseArg `sepBy` sep
-    skipSpaces
     void $ parseToken TokenParR
     pure args
 
-
-parseFunctionDecl :: Parser FunctionDecl
-parseFunctionDecl = do
+parseFunctionDefinition :: Parser FunctionDefinition
+parseFunctionDefinition = do
+    strspec <- parseStorageSpecifier
     rt <- parseType
-    skipSpaces
     sb <- readToken TokenSymbol
-    skipSpaces
     a  <- parseArgs
-    skipWhitespace
-    b  <- parseBlock
-    skipWhitespace
-    pure FunctionDecl {
-        funcRetType = rt,
-        funcSymbol  = sb,
-        funcArgs    = a,
-        funcBody    = b
-        }
-
+    b <- parseBlock 
+    pure FunctionDefinition {
+        funcDStrSpec = strspec,
+        funcDRetType = rt,
+        funcDSymbol  = sb,
+        funcDArgs    = a,
+        funcDBody    = b
+    }

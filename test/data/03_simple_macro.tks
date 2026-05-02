@@ -1,0 +1,10 @@
+[test/data/03_simple_macro.c:2:1] TokenKeyWord "int"
+[test/data/03_simple_macro.c:2:4] TokenSpace " "
+[test/data/03_simple_macro.c:2:5] TokenSymbol "x"
+[test/data/03_simple_macro.c:2:6] TokenSpace " "
+[test/data/03_simple_macro.c:2:7] TokenEq "="
+[test/data/03_simple_macro.c:2:8] TokenSpace " "
+[test/data/03_simple_macro.c:2:9] TokenIntLit "1"
+[test/data/03_simple_macro.c:2:10] TokenSemi ";"
+[test/data/03_simple_macro.c:3:1] TokenEnd ""
+=== End Of Tokens ===
