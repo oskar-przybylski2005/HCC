@@ -52,7 +52,7 @@ extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
 
 common warnings
-    ghc-options: -Wall -Wno-name-shadowing -Wno-orphans
+    ghc-options: -Wall -Wno-name-shadowing -Wno-orphans -O3
 
 executable hcc
     -- Import common warning flags.
@@ -62,7 +62,8 @@ executable hcc
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules:    Lexer, PrettyTree, Parser,
+    other-modules:    Lexer, Parser,
+                      Preprocessor, Common,
                       Parser.AST,
                       Parser.Common,
                       Parser.FunctionParser,
@@ -76,9 +77,14 @@ executable hcc
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.18.3.0,
                       megaparsec >= 9.7.0,
+                      parser-combinators,
+                      containers,
                       text,
-                      parser-combinators
-
+                      hspec,
+                      bytestring,
+                      filepath,
+                      directory,
+                      mtl
     -- Directories containing source files.
     hs-source-dirs:   app, src
 
@@ -88,15 +94,26 @@ executable hcc
 test-suite lexer-tests
     type:             exitcode-stdio-1.0
     main-is:          Spec.hs
+    other-modules:    Common,
+                      Lexer,
+                      LexerSpec,
+                      LexerUnitSpec,
+                      CommonSpec,
+                      Preprocessor,
+                      Parser.AST,
+                      Parser.Common,
+                      Parser.ExprParser
+
     hs-source-dirs:   test, src
 
     build-depends:    base ^>=4.18.3.0,
                       megaparsec >= 9.7.0,
                       parser-combinators,
+                      containers,
                       text,
                       hspec,
-                      tasty >= 1.4,
-                      tasty-hspec >= 1.2,
-                      tasty-golden >= 2.3,
                       bytestring,
                       filepath,
+                      directory,
+                      mtl
+    default-language: Haskell2010

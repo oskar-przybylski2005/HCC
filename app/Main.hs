@@ -2,13 +2,14 @@ module Main (main) where
 
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, hPutStr,stderr)
 import Text.Megaparsec (errorBundlePretty)
+
+import Common
+import Parser.AST
 
 import qualified Lexer
 import qualified Parser
-import qualified PrettyTree
-
 
 main :: IO ()
 main = do
@@ -17,10 +18,11 @@ main = do
             (a:_) -> a
             _     -> error "No files specified"
     tokens <- Lexer.lexer fileName
-    Lexer.printTokens tokens
+    printTokens tokens
     case Parser.parse fileName tokens of
-        Right p -> PrettyTree.printTree p
-        Left errBundle -> do
-            hPutStrLn stderr "\n Error while parsing: "
-            hPutStrLn stderr (errorBundlePretty errBundle)
-            exitFailure
+       Right p -> prettyPrint p
+       Left errBundle -> do
+           hPutStr   stderr "\n Error occured while parsing file: "
+           hPutStrLn stderr fileName
+           hPutStrLn stderr (errorBundlePretty errBundle)
+           exitFailure
