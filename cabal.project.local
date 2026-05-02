@@ -1,7 +1,3 @@
-ignore-project: False
-with-compiler: ghc-9.6.7
-jobs: $ncpus
-executable-dynamic: True
 package *
-  ghc-options: -j
-  optimization: False
+  shared: False
+  executable-dynamic: False
